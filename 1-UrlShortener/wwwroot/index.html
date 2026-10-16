@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Distributed URL Shortener</title>
+    <style>
+        :root { --bg: #0f172a; --card: #1e293b; --border: #334155; --text: #f8fafc; --muted: #94a3b8; --primary: #38bdf8; --primary-hover: #0284c7; --accent: #10b981; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background: var(--bg); color: var(--text); padding: 32px 16px; min-height: 100vh; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 800px; display: flex; flex-direction: column; gap: 24px; }
+        .header { text-align: center; }
+        .header h1 { font-size: 32px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+        .header p { color: var(--muted); font-size: 15px; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+        .card h2 { font-size: 18px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+        .form-group { margin-bottom: 16px; }
+        label { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+        input { width: 100%; padding: 12px 16px; background: #0b1120; border: 1px solid var(--border); border-radius: 8px; color: #fff; font-size: 14px; outline: none; transition: border-color 0.2s; }
+        input:focus { border-color: var(--primary); }
+        .btn { padding: 12px 20px; background: var(--primary); color: #0f172a; border: none; border-radius: 8px; font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+        .btn:hover { background: var(--primary-hover); color: #fff; }
+        .btn-secondary { background: #334155; color: #fff; }
+        .btn-secondary:hover { background: #475569; }
+        .result-box { display: none; margin-top: 16px; padding: 16px; background: rgba(16, 185, 129, 0.1); border: 1px solid var(--accent); border-radius: 8px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-top: 16px; }
+        .stat-card { background: #0b1120; padding: 16px; border-radius: 8px; border: 1px solid var(--border); text-align: center; }
+        .stat-value { font-size: 28px; font-weight: 800; color: var(--primary); }
+        .stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+        .log-box { font-family: monospace; font-size: 12px; height: 120px; overflow-y: auto; background: #090d16; border-radius: 6px; padding: 10px; color: #a5f3fc; margin-top: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Distributed URL Shortener</h1>
+            <p>Base62 KGS • Bloom Filter Protection • HTTP 307 Redirect • Async Analytics</p>
+        </div>
+
+        <div class="card">
+            <h2>Create Short URL</h2>
+            <div class="form-group">
+                <label>Destination Long URL</label>
+                <input type="url" id="longUrl" placeholder="https://example.com/very/long/deep/linked/article/slug" value="https://dotnet.microsoft.com/platform/why-dotnet">
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <div class="form-group">
+                    <label>Custom Alias (Optional)</label>
+                    <input type="text" id="customAlias" placeholder="e.g. myportfolio">
+                </div>
+                <div class="form-group">
+                    <label>TTL Expiration in Seconds (Optional)</label>
+                    <input type="number" id="ttl" placeholder="e.g. 86400">
+                </div>
+            </div>
+            <button class="btn" onclick="shortenUrl()">Shorten URL</button>
+
+            <div class="result-box" id="resultBox">
+                <div style="font-size: 13px; color: var(--muted); margin-bottom: 4px;">YOUR SHORTENED URL:</div>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="text" id="shortUrlOutput" readonly style="font-weight: 700; color: var(--accent);">
+                    <button class="btn" onclick="copyUrl()">Copy</button>
+                    <a id="visitBtn" target="_blank" class="btn btn-secondary" style="text-decoration:none; display:flex; align-items:center;">Visit</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Click Analytics & Cache Penetration Defense</h2>
+            <div style="display: flex; gap: 12px;">
+                <input type="text" id="analyticsCode" placeholder="Enter Short Code (e.g. myportfolio)" style="flex: 1;">
+                <button class="btn btn-secondary" onclick="fetchAnalytics()">View Analytics</button>
+                <button class="btn" style="background:#ef4444; color:#fff;" onclick="testBloomFilter()">Test Bloom Filter 404</button>
+            </div>
+
+            <div class="stats-grid" id="statsGrid" style="display: none;">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalClicks">0</div>
+                    <div class="stat-label">TOTAL CLICKS</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="topReferrer">-</div>
+                    <div class="stat-label">TOP REFERRER</div>
+                </div>
+            </div>
+
+            <div class="log-box" id="logBox">
+                <div>[SYSTEM] In-memory Bloom Filter & LRU cache initialized. Ready.</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentShortCode = '';
+
+        async function shortenUrl() {
+            const url = document.getElementById('longUrl').value;
+            const alias = document.getElementById('customAlias').value;
+            const ttl = document.getElementById('ttl').value;
+
+            const res = await fetch('/api/shorten', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ originalUrl: url, customAlias: alias || null, ttlSeconds: ttl ? parseInt(ttl) : null })
+            });
+
+            const data = await res.json();
+            if (res.ok) {
+                currentShortCode = data.shortCode;
+                document.getElementById('shortUrlOutput').value = data.shortUrl;
+                document.getElementById('visitBtn').href = data.shortUrl;
+                document.getElementById('resultBox').style.display = 'block';
+                document.getElementById('analyticsCode').value = data.shortCode;
+                log(`[KGS GENERATED] Short code: ${data.shortCode} -> ${data.originalUrl}`);
+            } else {
+                alert(data.error);
+                log(`[ERROR] ${data.error}`);
+            }
+        }
+
+        async function fetchAnalytics() {
+            const code = document.getElementById('analyticsCode').value || currentShortCode;
+            if (!code) return alert('Please enter a short code');
+
+            const res = await fetch(`/api/analytics/${code}`);
+            const data = await res.json();
+
+            document.getElementById('statsGrid').style.display = 'grid';
+            document.getElementById('totalClicks').innerText = data.totalClicks;
+            
+            const refs = Object.keys(data.topReferrers || {});
+            document.getElementById('topReferrer').innerText = refs.length ? refs[0] : 'None';
+
+            log(`[ANALYTICS] Code '${code}' has ${data.totalClicks} clicks.`);
+        }
+
+        async function testBloomFilter() {
+            const bogus = 'fake_' + Math.random().toString(36).substring(2, 8);
+            log(`Probing non-existent key: /${bogus}...`);
+            const res = await fetch(`/${bogus}`);
+            if (res.status === 404) {
+                log(`[BLOOM FILTER SHIELD] Key /${bogus} rejected instantly (0ms DB query load).`);
+            }
+        }
+
+        function copyUrl() {
+            const copyText = document.getElementById('shortUrlOutput');
+            copyText.select();
+            navigator.clipboard.writeText(copyText.value);
+            alert('Copied to clipboard!');
+        }
+
+        function log(msg) {
+            const box = document.getElementById('logBox');
+            const time = new Date().toLocaleTimeString();
+            box.innerHTML = `<div>[${time}] ${msg}</div>` + box.innerHTML;
+        }
+    </script>
+</body>
+</html>

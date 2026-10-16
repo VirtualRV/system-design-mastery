@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/1-UrlShortener/">
+    <Project Path="1-UrlShortener/UrlShortener.csproj" />
+  </Folder>
+  <Folder Name="/2-RateLimiter/">
+    <Project Path="2-RateLimiter/RateLimiter.csproj" />
+  </Folder>
+  <Folder Name="/3-ChatApp/">
+    <Project Path="3-ChatApp/ChatApp.csproj" />
+  </Folder>
+  <Folder Name="/4-NewsFeed/">
+    <Project Path="4-NewsFeed/NewsFeed.csproj" />
+  </Folder>
+  <Folder Name="/5-TicketBooking/">
+    <Project Path="5-TicketBooking/TicketBooking.csproj" />
+  </Folder>
+</Solution>

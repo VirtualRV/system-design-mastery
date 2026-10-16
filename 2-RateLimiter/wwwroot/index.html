@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Distributed Rate Limiter Dashboard</title>
+    <style>
+        :root { --bg: #0b0f19; --card: #151d30; --border: #24324f; --text: #f8fafc; --muted: #94a3b8; --primary: #6366f1; --accent: #10b981; --danger: #ef4444; --warning: #f59e0b; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background: var(--bg); color: var(--text); padding: 32px 16px; min-height: 100vh; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 850px; display: flex; flex-direction: column; gap: 24px; }
+        .header { text-align: center; }
+        .header h1 { font-size: 32px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+        .header p { color: var(--muted); font-size: 15px; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); }
+        .card h2 { font-size: 18px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+
+        .bucket-container { display: flex; flex-direction: column; align-items: center; padding: 24px 0; background: #080c14; border-radius: 12px; margin-bottom: 20px; border: 1px dashed var(--border); }
+        .bucket-title { font-size: 13px; font-weight: 700; color: var(--muted); letter-spacing: 1.5px; margin-bottom: 16px; }
+        .token-rack { display: flex; gap: 12px; }
+        .token { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
+        .token.full { background: var(--accent); color: #080c14; box-shadow: 0 0 15px rgba(16, 185, 129, 0.5); transform: scale(1.05); }
+        .token.empty { background: rgba(255,255,255,0.05); border: 2px dashed var(--border); color: var(--muted); opacity: 0.4; }
+
+        .btn-group { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+        .btn { padding: 12px 20px; border-radius: 8px; border: none; font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; flex: 1; }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover { background: #4f46e5; }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-danger:hover { background: #dc2626; }
+
+        .headers-panel { background: #080c14; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 12px; border: 1px solid var(--border); }
+        .header-item { display: flex; justify-content: space-between; margin-bottom: 6px; }
+        .header-name { color: var(--muted); }
+        .header-val { color: #a5f3fc; font-weight: 700; }
+
+        .throttle-banner { display: none; padding: 16px; background: rgba(239, 68, 68, 0.15); border: 1px solid var(--danger); border-radius: 8px; text-align: center; margin-bottom: 20px; animation: shake 0.4s; }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
+
+        .log-box { font-family: monospace; font-size: 12px; height: 140px; overflow-y: auto; background: #080c14; border-radius: 8px; padding: 12px; color: #a5f3fc; margin-top: 16px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Distributed Rate Limiter</h1>
+            <p>Token Bucket Algorithm • Atomic Concurrency • HTTP 429 & IETF RateLimit Headers</p>
+        </div>
+
+        <div class="card">
+            <h2>Live Token Bucket Visualization (Capacity: 5 | Refill: 1 token/sec)</h2>
+            <div class="bucket-container">
+                <div class="bucket-title">ACTIVE TOKEN RESERVES</div>
+                <div class="token-rack" id="tokenRack">
+                    <!-- 5 tokens injected via JS -->
+                </div>
+            </div>
+
+            <div class="throttle-banner" id="throttleBanner">
+                <div style="font-weight: 800; font-size: 18px; color: var(--danger); margin-bottom: 4px;">429 TOO MANY REQUESTS</div>
+                <div style="font-size: 13px;">Rate limit exceeded! Retry after: <strong id="retrySec">1</strong>s</div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="sendRequest()">Send Request (Cost: 1 Token)</button>
+                <button class="btn btn-danger" onclick="simulateBurst()">Simulate Burst (10 Rapid Requests)</button>
+            </div>
+
+            <div class="headers-panel">
+                <div class="header-item"><span class="header-name">Client Identifier:</span><span class="header-val" id="hClient">127.0.0.1</span></div>
+                <div class="header-item"><span class="header-name">RateLimit-Limit:</span><span class="header-val" id="hLimit">5</span></div>
+                <div class="header-item"><span class="header-name">RateLimit-Remaining:</span><span class="header-val" id="hRemaining">5</span></div>
+                <div class="header-item"><span class="header-name">Retry-After:</span><span class="header-val" id="hRetry">-</span></div>
+            </div>
+
+            <div class="log-box" id="logBox">
+                <div>[SYSTEM] Rate limiter middleware active. Token bucket initialized with 5 tokens.</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentRemaining = 5;
+
+        function updateTokens(remaining) {
+            currentRemaining = remaining;
+            const rack = document.getElementById('tokenRack');
+            rack.innerHTML = '';
+            for (let i = 0; i < 5; i++) {
+                const t = document.createElement('div');
+                t.className = `token ${i < remaining ? 'full' : 'empty'}`;
+                t.innerText = i < remaining ? '⚡' : '';
+                rack.appendChild(t);
+            }
+        }
+
+        async function sendRequest() {
+            try {
+                const res = await fetch('/api/data');
+                const remaining = res.headers.get('RateLimit-Remaining');
+                const limit = res.headers.get('RateLimit-Limit');
+                const retry = res.headers.get('Retry-After');
+
+                document.getElementById('hLimit').innerText = limit || '5';
+                document.getElementById('hRemaining').innerText = remaining || '0';
+                document.getElementById('hRetry').innerText = retry ? `${retry}s` : '-';
+
+                if (res.status === 200) {
+                    hideThrottle();
+                    updateTokens(parseInt(remaining));
+                    log(`[200 OK] Request allowed. Tokens remaining: ${remaining}`);
+                } else if (res.status === 429) {
+                    updateTokens(0);
+                    showThrottle(retry || '1');
+                    log(`[429 THROTTLED] Limit exceeded! Retry-After: ${retry}s`);
+                }
+            } catch (err) {
+                log(`[ERROR] ${err.message}`);
+            }
+        }
+
+        async function simulateBurst() {
+            log(`[BURST TEST] Dispatching 10 rapid concurrent requests...`);
+            for (let i = 1; i <= 10; i++) {
+                sendRequest();
+                await new Promise(r => setTimeout(r, 40));
+            }
+        }
+
+        function showThrottle(sec) {
+            const banner = document.getElementById('throttleBanner');
+            document.getElementById('retrySec').innerText = sec;
+            banner.style.display = 'block';
+        }
+
+        function hideThrottle() {
+            document.getElementById('throttleBanner').style.display = 'none';
+        }
+
+        function log(msg) {
+            const box = document.getElementById('logBox');
+            const time = new Date().toLocaleTimeString();
+            box.innerHTML = `<div>[${time}] ${msg}</div>` + box.innerHTML;
+        }
+
+        // Auto refill simulation in UI matching backend rate (1 token per second)
+        setInterval(() => {
+            if (currentRemaining < 5) {
+                updateTokens(currentRemaining + 1);
+            }
+        }, 1000);
+
+        updateTokens(5);
+    </script>
+</body>
+</html>

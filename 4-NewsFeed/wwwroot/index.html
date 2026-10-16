@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>News Feed System Dashboard</title>
+    <style>
+        :root { --bg: #0b0f19; --card: #151d30; --border: #24324f; --text: #f8fafc; --muted: #94a3b8; --primary: #3b82f6; --celeb: #a855f7; --regular: #10b981; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background: var(--bg); color: var(--text); padding: 32px 16px; min-height: 100vh; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 750px; display: flex; flex-direction: column; gap: 24px; }
+        .header { text-align: center; }
+        .header h1 { font-size: 30px; font-weight: 800; color: #fff; margin-bottom: 6px; }
+        .header p { color: var(--muted); font-size: 14px; }
+
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+        .author-select { display: flex; gap: 12px; margin-bottom: 12px; }
+        .author-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: #080c14; color: var(--muted); font-weight: 600; cursor: pointer; transition: all 0.2s; }
+        .author-btn.active { border-color: var(--primary); background: rgba(59, 130, 246, 0.15); color: #fff; }
+        .author-btn.celeb.active { border-color: var(--celeb); background: rgba(168, 85, 247, 0.15); color: #e9d5ff; }
+
+        textarea { width: 100%; height: 80px; padding: 12px; background: #080c14; border: 1px solid var(--border); border-radius: 8px; color: #fff; font-size: 14px; resize: none; outline: none; margin-bottom: 12px; }
+        .btn { padding: 10px 18px; border-radius: 8px; border: none; font-weight: 700; font-size: 14px; cursor: pointer; background: var(--primary); color: #fff; }
+        .btn:hover { opacity: 0.9; }
+
+        .feed-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .feed-stream { display: flex; flex-direction: column; gap: 14px; }
+        .post-card { background: #080c14; border: 1px solid var(--border); border-radius: 10px; padding: 16px; transition: border-color 0.2s; }
+        .post-card:hover { border-color: #3b82f6; }
+        .post-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .post-author { font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 6px; }
+        .badge { font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 20px; letter-spacing: 0.5px; }
+        .badge.push { background: rgba(16, 185, 129, 0.15); color: var(--regular); border: 1px solid var(--regular); }
+        .badge.pull { background: rgba(168, 85, 247, 0.15); color: var(--celeb); border: 1px solid var(--celeb); }
+        .post-time { font-size: 11px; color: var(--muted); }
+        .post-content { font-size: 14px; line-height: 1.5; color: #e2e8f0; }
+
+        .load-more { width: 100%; margin-top: 16px; padding: 12px; background: #1e293b; color: #fff; border: 1px solid var(--border); border-radius: 8px; font-weight: 600; cursor: pointer; }
+        .load-more:hover { background: #334155; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>News Feed System</h1>
+            <p>Hybrid Fanout Engine • Celebrity Outbox Bypass • Cursor-Based Pagination</p>
+        </div>
+
+        <div class="card">
+            <h3 style="font-size: 15px; margin-bottom: 10px; color: var(--muted);">PUBLISH NEW POST</h3>
+            <div class="author-select">
+                <button class="author-btn active" id="btnBob" onclick="selectAuthor('bob', false)">Bob (Regular User - 150 Followers)</button>
+                <button class="author-btn celeb" id="btnElon" onclick="selectAuthor('elon', true)">Elon Musk (Celebrity - 180M Followers)</button>
+            </div>
+            <textarea id="postContent" placeholder="What's happening?"></textarea>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span id="fanoutNotice" style="font-size: 12px; color: var(--regular);">Strategy: Eager Fanout-on-Write to follower timeline caches.</span>
+                <button class="btn" onclick="publishPost()">Post</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="feed-header">
+                <div>
+                    <h2 style="font-size: 18px;">Alice's Home Timeline Feed</h2>
+                    <span style="font-size: 12px; color: var(--muted);">Alice follows Bob & Elon Musk</span>
+                </div>
+                <button class="btn" style="background:#1e293b; border:1px solid var(--border);" onclick="refreshFeed()">Refresh</button>
+            </div>
+
+            <div class="feed-stream" id="feedStream">
+                <!-- Posts injected via JS -->
+            </div>
+
+            <button class="load-more" id="loadMoreBtn" style="display:none;" onclick="loadMore()">Load More (Next Cursor)</button>
+        </div>
+    </div>
+
+    <script>
+        let currentAuthor = 'bob';
+        let isCelebrity = false;
+        let nextCursor = null;
+
+        function selectAuthor(author, celeb) {
+            currentAuthor = author;
+            isCelebrity = celeb;
+            document.getElementById('btnBob').className = `author-btn ${author === 'bob' ? 'active' : ''}`;
+            document.getElementById('btnElon').className = `author-btn celeb ${author === 'elon' ? 'active' : ''}`;
+            
+            const notice = document.getElementById('fanoutNotice');
+            if (celeb) {
+                notice.innerText = 'Strategy: Bypasses fanout writes! Writes to outbox; pulled & merged on feed read.';
+                notice.style.color = 'var(--celeb)';
+            } else {
+                notice.innerText = 'Strategy: Eager Fanout-on-Write to follower timeline caches.';
+                notice.style.color = 'var(--regular)';
+            }
+        }
+
+        async function publishPost() {
+            const content = document.getElementById('postContent').value.trim();
+            if (!content) return;
+
+            const res = await fetch('/api/posts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ authorId: currentAuthor, content })
+            });
+
+            if (res.ok) {
+                document.getElementById('postContent').value = '';
+                await refreshFeed();
+            }
+        }
+
+        async function refreshFeed() {
+            nextCursor = null;
+            document.getElementById('feedStream').innerHTML = '';
+            await fetchFeed(null);
+        }
+
+        async function loadMore() {
+            if (nextCursor) {
+                await fetchFeed(nextCursor);
+            }
+        }
+
+        async function fetchFeed(cursor) {
+            const url = `/api/feed?userId=alice&limit=5${cursor ? `&cursor=${cursor}` : ''}`;
+            const res = await fetch(url);
+            const data = await res.json();
+
+            const stream = document.getElementById('feedStream');
+            if (!cursor && data.posts.length === 0) {
+                stream.innerHTML = '<div style="color:var(--muted); text-align:center; padding:20px;">No posts in feed yet. Publish one above!</div>';
+                return;
+            }
+
+            data.posts.forEach(post => {
+                const isCeleb = post.authorId === 'elon';
+                const card = document.createElement('div');
+                card.className = 'post-card';
+                const time = new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+                card.innerHTML = `
+                    <div class="post-top">
+                        <div class="post-author">
+                            ${post.authorId === 'elon' ? 'Elon Musk' : 'Bob'}
+                            <span class="badge ${isCeleb ? 'pull' : 'push'}">${isCeleb ? 'HYBRID PULL' : 'PUSH MODEL'}</span>
+                        </div>
+                        <div class="post-time">${time}</div>
+                    </div>
+                    <div class="post-content">${post.content}</div>
+                `;
+                stream.appendChild(card);
+            });
+
+            nextCursor = data.nextCursor;
+            document.getElementById('loadMoreBtn').style.display = data.hasMore ? 'block' : 'none';
+        }
+
+        refreshFeed();
+    </script>
+</body>
+</html>
