@@ -3,33 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>News Feed System Dashboard</title>
+    <title>News Feed System (Hybrid Fanout)</title>
     <style>
-        :root { --bg: #0b0f19; --card: #151d30; --border: #24324f; --text: #f8fafc; --muted: #94a3b8; --primary: #3b82f6; --celeb: #a855f7; --regular: #10b981; }
+        :root {
+            --bg: #0b0f19;
+            --card: #151d30;
+            --border: #24324f;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --primary: #3b82f6;
+            --celeb: #a855f7;
+            --regular: #10b981;
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        body { background: var(--bg); color: var(--text); padding: 32px 16px; min-height: 100vh; display: flex; justify-content: center; }
-        .container { width: 100%; max-width: 750px; display: flex; flex-direction: column; gap: 24px; }
+        body { background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+        
+        /* Unified Top Navigation Bar */
+        .top-nav { background: #0f1626; border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+        .nav-brand { font-weight: 800; font-size: 15px; color: #fff; display: flex; align-items: center; gap: 8px; }
+        .nav-links { display: flex; gap: 8px; flex-wrap: wrap; }
+        .nav-pill { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; text-decoration: none; color: var(--muted); border: 1px solid transparent; transition: all 0.2s; }
+        .nav-pill:hover { color: #fff; border-color: var(--border); background: rgba(255,255,255,0.05); }
+        .nav-pill.active { background: rgba(59, 130, 246, 0.15); border-color: var(--primary); color: var(--primary); }
+
+        .main-content { max-width: 760px; margin: 28px auto; padding: 0 16px; width: 100%; display: flex; flex-direction: column; gap: 24px; }
         .header { text-align: center; }
         .header h1 { font-size: 30px; font-weight: 800; color: #fff; margin-bottom: 6px; }
         .header p { color: var(--muted); font-size: 14px; }
 
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 22px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); }
         .author-select { display: flex; gap: 12px; margin-bottom: 12px; }
-        .author-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: #080c14; color: var(--muted); font-weight: 600; cursor: pointer; transition: all 0.2s; }
+        .author-btn { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: #080c14; color: var(--muted); font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 13px; }
         .author-btn.active { border-color: var(--primary); background: rgba(59, 130, 246, 0.15); color: #fff; }
         .author-btn.celeb.active { border-color: var(--celeb); background: rgba(168, 85, 247, 0.15); color: #e9d5ff; }
 
-        textarea { width: 100%; height: 80px; padding: 12px; background: #080c14; border: 1px solid var(--border); border-radius: 8px; color: #fff; font-size: 14px; resize: none; outline: none; margin-bottom: 12px; }
+        textarea { width: 100%; height: 75px; padding: 12px; background: #080c14; border: 1px solid var(--border); border-radius: 8px; color: #fff; font-size: 14px; resize: none; outline: none; margin-bottom: 12px; }
         .btn { padding: 10px 18px; border-radius: 8px; border: none; font-weight: 700; font-size: 14px; cursor: pointer; background: var(--primary); color: #fff; }
         .btn:hover { opacity: 0.9; }
 
         .feed-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
         .feed-stream { display: flex; flex-direction: column; gap: 14px; }
-        .post-card { background: #080c14; border: 1px solid var(--border); border-radius: 10px; padding: 16px; transition: border-color 0.2s; }
-        .post-card:hover { border-color: #3b82f6; }
+        .post-card { background: #080c14; border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
         .post-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
         .post-author { font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 6px; }
-        .badge { font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 20px; letter-spacing: 0.5px; }
+        .badge { font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 20px; }
         .badge.push { background: rgba(16, 185, 129, 0.15); color: var(--regular); border: 1px solid var(--regular); }
         .badge.pull { background: rgba(168, 85, 247, 0.15); color: var(--celeb); border: 1px solid var(--celeb); }
         .post-time { font-size: 11px; color: var(--muted); }
@@ -40,14 +57,25 @@
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="top-nav">
+        <div class="nav-brand">🏛️ SYSTEM DESIGN MASTERY</div>
+        <div class="nav-links">
+            <a href="http://localhost:5149" class="nav-pill">🔗 1. URL Shortener</a>
+            <a href="http://localhost:5092" class="nav-pill">⚡ 2. Rate Limiter</a>
+            <a href="http://localhost:5052" class="nav-pill">💬 3. Chat App</a>
+            <a href="http://localhost:5176" class="nav-pill active">📰 4. News Feed</a>
+            <a href="http://localhost:5116" class="nav-pill">🎟️ 5. Ticket Booking</a>
+        </div>
+    </div>
+
+    <div class="main-content">
         <div class="header">
             <h1>News Feed System</h1>
             <p>Hybrid Fanout Engine • Celebrity Outbox Bypass • Cursor-Based Pagination</p>
         </div>
 
         <div class="card">
-            <h3 style="font-size: 15px; margin-bottom: 10px; color: var(--muted);">PUBLISH NEW POST</h3>
+            <h3 style="font-size: 14px; margin-bottom: 10px; color: var(--muted);">PUBLISH POST AS:</h3>
             <div class="author-select">
                 <button class="author-btn active" id="btnBob" onclick="selectAuthor('bob', false)">Bob (Regular User - 150 Followers)</button>
                 <button class="author-btn celeb" id="btnElon" onclick="selectAuthor('elon', true)">Elon Musk (Celebrity - 180M Followers)</button>
@@ -55,7 +83,7 @@
             <textarea id="postContent" placeholder="What's happening?"></textarea>
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <span id="fanoutNotice" style="font-size: 12px; color: var(--regular);">Strategy: Eager Fanout-on-Write to follower timeline caches.</span>
-                <button class="btn" onclick="publishPost()">Post</button>
+                <button class="btn" onclick="publishPost()">Publish Post</button>
             </div>
         </div>
 
@@ -68,11 +96,8 @@
                 <button class="btn" style="background:#1e293b; border:1px solid var(--border);" onclick="refreshFeed()">Refresh</button>
             </div>
 
-            <div class="feed-stream" id="feedStream">
-                <!-- Posts injected via JS -->
-            </div>
-
-            <button class="load-more" id="loadMoreBtn" style="display:none;" onclick="loadMore()">Load More (Next Cursor)</button>
+            <div class="feed-stream" id="feedStream"></div>
+            <button class="load-more" id="loadMoreBtn" style="display:none;" onclick="loadMore()">Load More (Cursor-based Pagination)</button>
         </div>
     </div>
 

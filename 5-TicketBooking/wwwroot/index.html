@@ -3,31 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>High-Concurrency Ticket Booking System</title>
+    <title>Stadium Ticket Booking (Distributed Locks)</title>
     <style>
         :root {
-            --bg: #0f172a;
-            --card: #1e293b;
-            --border: #334155;
+            --bg: #090e17;
+            --card: #111a2e;
+            --border: #1e2e4f;
             --text: #f8fafc;
             --muted: #94a3b8;
             --avail: #10b981;
             --held: #f59e0b;
             --booked: #ef4444;
-            --primary: #6366f1;
-            --primary-hover: #4f46e5;
+            --primary: #f59e0b;
+            --primary-hover: #d97706;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        body { background: var(--bg); color: var(--text); padding: 24px; min-height: 100vh; }
-        .container { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 1fr 360px; gap: 24px; }
+        body { background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+        
+        /* Unified Top Navigation Bar */
+        .top-nav { background: #0b1220; border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+        .nav-brand { font-weight: 800; font-size: 15px; color: #fff; display: flex; align-items: center; gap: 8px; }
+        .nav-links { display: flex; gap: 8px; flex-wrap: wrap; }
+        .nav-pill { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; text-decoration: none; color: var(--muted); border: 1px solid transparent; transition: all 0.2s; }
+        .nav-pill:hover { color: #fff; border-color: var(--border); background: rgba(255,255,255,0.05); }
+        .nav-pill.active { background: rgba(245, 158, 11, 0.15); border-color: var(--primary); color: var(--primary); }
+
+        .container { max-width: 1100px; margin: 24px auto; padding: 0 16px; width: 100%; display: grid; grid-template-columns: 1fr 360px; gap: 24px; }
         @media(max-width: 860px) { .container { grid-template-columns: 1fr; } }
         
-        .header { grid-column: 1 / -1; margin-bottom: 8px; text-align: center; }
-        .header h1 { font-size: 28px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+        .header { grid-column: 1 / -1; margin-bottom: 4px; text-align: center; }
+        .header h1 { font-size: 30px; font-weight: 800; color: #fff; margin-bottom: 6px; }
         .header p { color: var(--muted); font-size: 14px; }
         
-        .venue-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
-        .stage { background: linear-gradient(180deg, #38bdf8 0%, #0284c7 100%); color: #fff; text-align: center; font-weight: 700; letter-spacing: 2px; padding: 10px; border-radius: 8px; margin-bottom: 30px; box-shadow: 0 4px 15px rgba(56, 189, 248, 0.2); }
+        .venue-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .stage { background: linear-gradient(180deg, #f59e0b 0%, #b45309 100%); color: #000; text-align: center; font-weight: 800; letter-spacing: 2px; padding: 10px; border-radius: 8px; margin-bottom: 30px; }
         
         .seat-grid { display: flex; flex-direction: column; gap: 12px; align-items: center; }
         .seat-row { display: flex; gap: 8px; align-items: center; }
@@ -35,7 +44,7 @@
         
         .seat {
             width: 36px; height: 36px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
-            font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s ease; user-select: none;
+            font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.15s ease; user-select: none;
         }
         .seat.available { background: rgba(16, 185, 129, 0.15); border: 1px solid var(--avail); color: var(--avail); }
         .seat.available:hover { transform: scale(1.15); background: var(--avail); color: #fff; }
@@ -50,37 +59,46 @@
         .legend-color { width: 14px; height: 14px; border-radius: 4px; }
 
         .sidebar { display: flex; flex-direction: column; gap: 16px; }
-        .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
-        .panel h3 { font-size: 16px; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+        .panel { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+        .panel h3 { font-size: 15px; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
 
         .btn {
-            width: 100%; padding: 10px 16px; border-radius: 8px; border: none; font-size: 14px; font-weight: 600;
+            width: 100%; padding: 11px 16px; border-radius: 8px; border: none; font-size: 14px; font-weight: 700;
             cursor: pointer; transition: background 0.2s; margin-top: 8px;
         }
-        .btn-primary { background: var(--primary); color: #fff; }
-        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-primary { background: #3b82f6; color: #fff; }
+        .btn-primary:hover { background: #2563eb; }
         .btn-success { background: var(--avail); color: #fff; }
         .btn-danger { background: var(--booked); color: #fff; }
         .btn-warning { background: var(--held); color: #000; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
         .timer-box { font-size: 32px; font-weight: 800; color: var(--held); text-align: center; margin: 12px 0; font-variant-numeric: tabular-nums; }
-        .log-box { font-family: monospace; font-size: 11px; height: 150px; overflow-y: auto; background: #090d16; border-radius: 6px; padding: 10px; color: #a5f3fc; }
+        .log-box { font-family: monospace; font-size: 11px; height: 150px; overflow-y: auto; background: #05080f; border-radius: 6px; padding: 10px; color: #a5f3fc; border: 1px solid var(--border); }
         .log-line { margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 2px; }
     </style>
 </head>
 <body>
+    <div class="top-nav">
+        <div class="nav-brand">🏛️ SYSTEM DESIGN MASTERY</div>
+        <div class="nav-links">
+            <a href="http://localhost:5149" class="nav-pill">🔗 1. URL Shortener</a>
+            <a href="http://localhost:5092" class="nav-pill">⚡ 2. Rate Limiter</a>
+            <a href="http://localhost:5052" class="nav-pill">💬 3. Chat App</a>
+            <a href="http://localhost:5176" class="nav-pill">📰 4. News Feed</a>
+            <a href="http://localhost:5116" class="nav-pill active">🎟️ 5. Ticket Booking</a>
+        </div>
+    </div>
+
     <div class="container">
         <div class="header">
             <h1>Stadium Ticket Booking System</h1>
-            <p>Distributed Seat Locking (Redlock) • 10-Minute Hold Reservation • Zero Double-Booking</p>
+            <p>Distributed In-Memory Lock (Redlock) • 10-Minute Hold Reservation • Zero Double-Booking</p>
         </div>
 
         <div class="venue-card">
-            <div class="stage">STAGE / CONCERT ARENA</div>
-            <div class="seat-grid" id="seatGrid">
-                <!-- Injected via JavaScript -->
-            </div>
+            <div class="stage">MAIN CONCERT STAGE / ARENA</div>
+            <div class="seat-grid" id="seatGrid"></div>
 
             <div class="legend">
                 <div class="legend-item"><div class="legend-color" style="background:var(--avail)"></div> Available</div>
@@ -92,14 +110,14 @@
         <div class="sidebar">
             <div class="panel">
                 <h3>Selected Seat</h3>
-                <div id="selectionInfo" style="font-size: 14px; color: var(--muted); margin-bottom: 12px;">
+                <div id="selectionInfo" style="font-size: 13px; color: var(--muted); margin-bottom: 12px;">
                     Click any available seat on the stadium map to inspect.
                 </div>
                 <button class="btn btn-warning" id="holdBtn" disabled onclick="holdSelectedSeat()">Hold Seat (10 Mins)</button>
                 <button class="btn btn-danger" id="releaseBtn" style="display:none;" onclick="releaseSelectedSeat()">Cancel Hold</button>
                 
                 <div id="countdownSection" style="display:none;">
-                    <div style="font-size:12px; color:var(--muted); text-align:center; margin-top:12px;">TIME REMAINING TO COMPLETE PAYMENT</div>
+                    <div style="font-size:11px; color:var(--muted); text-align:center; margin-top:12px;">TIME REMAINING TO COMPLETE PAYMENT</div>
                     <div class="timer-box" id="timerDisplay">10:00</div>
                     <button class="btn btn-success" id="payBtn" onclick="confirmPayment()">Confirm & Pay ($<span id="seatPrice">0</span>)</button>
                 </div>
@@ -294,7 +312,7 @@
         }
 
         loadSeats();
-        setInterval(loadSeats, 3000); // Poll status every 3s
+        setInterval(loadSeats, 3000);
     </script>
 </body>
 </html>

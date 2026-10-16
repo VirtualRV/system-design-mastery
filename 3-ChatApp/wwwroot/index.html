@@ -3,26 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Real-Time Chat Application</title>
+    <title>Real-Time Chat Application (WebSockets)</title>
     <style>
-        :root { --bg: #0b1120; --card: #1e293b; --border: #334155; --text: #f8fafc; --muted: #94a3b8; --alice-bubble: #0284c7; --bob-bubble: #475569; --ack-sent: #94a3b8; --ack-deliv: #cbd5e1; --ack-read: #38bdf8; }
+        :root {
+            --bg: #0b1120;
+            --card: #1e293b;
+            --border: #334155;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --alice-bubble: #0284c7;
+            --bob-bubble: #475569;
+            --ack-sent: #94a3b8;
+            --ack-deliv: #cbd5e1;
+            --ack-read: #38bdf8;
+            --primary: #0284c7;
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        body { background: var(--bg); color: var(--text); padding: 24px; min-height: 100vh; }
-        .header { text-align: center; margin-bottom: 24px; }
-        .header h1 { font-size: 28px; font-weight: 800; color: #fff; margin-bottom: 6px; }
+        body { background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+        
+        /* Unified Top Navigation Bar */
+        .top-nav { background: #0f172a; border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+        .nav-brand { font-weight: 800; font-size: 15px; color: #fff; display: flex; align-items: center; gap: 8px; }
+        .nav-links { display: flex; gap: 8px; flex-wrap: wrap; }
+        .nav-pill { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; text-decoration: none; color: var(--muted); border: 1px solid transparent; transition: all 0.2s; }
+        .nav-pill:hover { color: #fff; border-color: var(--border); background: rgba(255,255,255,0.05); }
+        .nav-pill.active { background: rgba(2, 132, 199, 0.15); border-color: var(--primary); color: var(--primary); }
+
+        .main-content { max-width: 1100px; margin: 24px auto; padding: 0 16px; width: 100%; display: flex; flex-direction: column; gap: 20px; }
+        .header { text-align: center; }
+        .header h1 { font-size: 30px; font-weight: 800; color: #fff; margin-bottom: 6px; }
         .header p { color: var(--muted); font-size: 14px; }
-        .chat-container { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+
+        .chat-container { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
         @media(max-width: 768px) { .chat-container { grid-template-columns: 1fr; } }
         
-        .chat-window { background: var(--card); border: 1px solid var(--border); border-radius: 14px; display: flex; flex-direction: column; height: 580px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+        .chat-window { background: var(--card); border: 1px solid var(--border); border-radius: 14px; display: flex; flex-direction: column; height: 560px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.4); }
         .chat-topbar { padding: 14px 18px; background: #0f172a; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
         .user-info { display: flex; align-items: center; gap: 10px; }
-        .avatar { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; background: #38bdf8; color: #0f172a; }
+        .avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; background: #38bdf8; color: #0f172a; }
         .avatar.bob { background: #a855f7; }
         .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; display: inline-block; margin-right: 4px; box-shadow: 0 0 8px #10b981; }
 
         .messages-area { flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #0b1120; }
-        .bubble { max-width: 75%; padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.4; position: relative; word-break: break-word; }
+        .bubble { max-width: 75%; padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.4; word-break: break-word; }
         .bubble.outgoing { align-self: flex-end; background: var(--alice-bubble); color: #fff; border-bottom-right-radius: 2px; }
         .bubble.incoming { align-self: flex-start; background: var(--bob-bubble); color: #fff; border-bottom-left-radius: 2px; }
         .bubble-meta { font-size: 10px; opacity: 0.7; margin-top: 4px; text-align: right; display: flex; justify-content: flex-end; align-items: center; gap: 4px; }
@@ -38,47 +61,60 @@
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>Real-Time Chat Application</h1>
-        <p>Live WebSockets • 3-Stage Delivery Handshake (✓, ✓✓, <span style="color:#38bdf8">✓✓</span>) • Dual-Client Simulator</p>
+    <div class="top-nav">
+        <div class="nav-brand">🏛️ SYSTEM DESIGN MASTERY</div>
+        <div class="nav-links">
+            <a href="http://localhost:5149" class="nav-pill">🔗 1. URL Shortener</a>
+            <a href="http://localhost:5092" class="nav-pill">⚡ 2. Rate Limiter</a>
+            <a href="http://localhost:5052" class="nav-pill active">💬 3. Chat App</a>
+            <a href="http://localhost:5176" class="nav-pill">📰 4. News Feed</a>
+            <a href="http://localhost:5116" class="nav-pill">🎟️ 5. Ticket Booking</a>
+        </div>
     </div>
 
-    <div class="chat-container">
-        <!-- Alice's Client Window -->
-        <div class="chat-window">
-            <div class="chat-topbar">
-                <div class="user-info">
-                    <div class="avatar">A</div>
-                    <div>
-                        <div style="font-weight: 700; font-size: 14px;">Alice</div>
-                        <div style="font-size: 11px; color: var(--muted);"><span class="status-dot"></span>Connected (WebSocket)</div>
-                    </div>
-                </div>
-                <div style="font-size: 12px; color: var(--muted);">Chatting with Bob</div>
-            </div>
-            <div class="messages-area" id="aliceMessages"></div>
-            <div class="chat-input-bar">
-                <input type="text" id="aliceInput" placeholder="Message Bob as Alice..." onkeydown="if(event.key==='Enter') sendAlice()">
-                <button onclick="sendAlice()">Send</button>
-            </div>
+    <div class="main-content">
+        <div class="header">
+            <h1>Real-Time Chat Application</h1>
+            <p>Live WebSockets • 3-Stage Delivery Handshake (✓, ✓✓, <span style="color:#38bdf8">✓✓</span>) • Dual-Client Simulator</p>
         </div>
 
-        <!-- Bob's Client Window -->
-        <div class="chat-window">
-            <div class="chat-topbar">
-                <div class="user-info">
-                    <div class="avatar bob">B</div>
-                    <div>
-                        <div style="font-weight: 700; font-size: 14px;">Bob</div>
-                        <div style="font-size: 11px; color: var(--muted);"><span class="status-dot"></span>Connected (WebSocket)</div>
+        <div class="chat-container">
+            <!-- Alice's Client Window -->
+            <div class="chat-window">
+                <div class="chat-topbar">
+                    <div class="user-info">
+                        <div class="avatar">A</div>
+                        <div>
+                            <div style="font-weight: 700; font-size: 14px;">Alice</div>
+                            <div style="font-size: 11px; color: var(--muted);"><span class="status-dot"></span>Connected (ws://localhost:5052/ws)</div>
+                        </div>
                     </div>
+                    <div style="font-size: 12px; color: var(--muted);">Direct with Bob</div>
                 </div>
-                <div style="font-size: 12px; color: var(--muted);">Chatting with Alice</div>
+                <div class="messages-area" id="aliceMessages"></div>
+                <div class="chat-input-bar">
+                    <input type="text" id="aliceInput" placeholder="Message Bob as Alice..." onkeydown="if(event.key==='Enter') sendAlice()">
+                    <button onclick="sendAlice()">Send</button>
+                </div>
             </div>
-            <div class="messages-area" id="bobMessages"></div>
-            <div class="chat-input-bar">
-                <input type="text" id="bobInput" placeholder="Message Alice as Bob..." onkeydown="if(event.key==='Enter') sendBob()">
-                <button onclick="sendBob()">Send</button>
+
+            <!-- Bob's Client Window -->
+            <div class="chat-window">
+                <div class="chat-topbar">
+                    <div class="user-info">
+                        <div class="avatar bob">B</div>
+                        <div>
+                            <div style="font-weight: 700; font-size: 14px;">Bob</div>
+                            <div style="font-size: 11px; color: var(--muted);"><span class="status-dot"></span>Connected (ws://localhost:5052/ws)</div>
+                        </div>
+                    </div>
+                    <div style="font-size: 12px; color: var(--muted);">Direct with Alice</div>
+                </div>
+                <div class="messages-area" id="bobMessages"></div>
+                <div class="chat-input-bar">
+                    <input type="text" id="bobInput" placeholder="Message Alice as Bob..." onkeydown="if(event.key==='Enter') sendBob()">
+                    <button onclick="sendBob()">Send</button>
+                </div>
             </div>
         </div>
     </div>
@@ -86,7 +122,6 @@
     <script>
         const wsHost = window.location.host;
         let aliceSocket, bobSocket;
-        const aliceMsgMap = {};
 
         function initSockets() {
             aliceSocket = new WebSocket(`ws://${wsHost}/ws?userId=alice`);
@@ -94,9 +129,6 @@
 
             aliceSocket.onmessage = (e) => handleAliceMessage(JSON.parse(e.data));
             bobSocket.onmessage = (e) => handleBobMessage(JSON.parse(e.data));
-
-            aliceSocket.onopen = () => console.log('Alice WebSocket open');
-            bobSocket.onopen = () => console.log('Bob WebSocket open');
         }
 
         function sendAlice() {
@@ -105,19 +137,11 @@
             if (!text) return;
             const clientMsgId = 'c_' + Math.random().toString(36).substring(2);
 
-            const packet = {
-                type: 0, // SendDirectMessage
-                recipientId: 'bob',
-                content: text,
-                clientMsgId: clientMsgId
-            };
-
+            const packet = { type: 0, recipientId: 'bob', content: text, clientMsgId: clientMsgId };
             aliceSocket.send(JSON.stringify(packet));
             input.value = '';
 
-            // Render outgoing in Alice window
             renderMessage('aliceMessages', text, 'outgoing', clientMsgId, '✓', 'sent');
-            aliceMsgMap[clientMsgId] = true;
         }
 
         function sendBob() {
@@ -126,15 +150,10 @@
             if (!text) return;
             const clientMsgId = 'c_' + Math.random().toString(36).substring(2);
 
-            const packet = {
-                type: 0,
-                recipientId: 'alice',
-                content: text,
-                clientMsgId: clientMsgId
-            };
-
+            const packet = { type: 0, recipientId: 'alice', content: text, clientMsgId: clientMsgId };
             bobSocket.send(JSON.stringify(packet));
             input.value = '';
+
             renderMessage('bobMessages', text, 'outgoing', clientMsgId, '✓', 'sent');
         }
 
@@ -142,38 +161,19 @@
             if (packet.type === 2) { // MessageAck
                 const checkEl = document.getElementById(`checks_${packet.clientMsgId || packet.serverMsgId}`);
                 if (checkEl) {
-                    if (packet.status === 2) { // Delivered
-                        checkEl.innerText = '✓✓';
-                        checkEl.className = 'checks delivered';
-                    } else if (packet.status === 3) { // Read
-                        checkEl.innerText = '✓✓';
-                        checkEl.className = 'checks read';
-                    }
+                    if (packet.status === 2) { checkEl.innerText = '✓✓'; checkEl.className = 'checks delivered'; }
+                    else if (packet.status === 3) { checkEl.innerText = '✓✓'; checkEl.className = 'checks read'; }
                 }
             } else if (packet.type === 0) { // Incoming from Bob
                 renderMessage('aliceMessages', packet.content, 'incoming', packet.serverMsgId);
-                // Send Read Receipt
-                aliceSocket.send(JSON.stringify({
-                    type: 2,
-                    status: 3,
-                    conversationId: packet.conversationId,
-                    serverMsgId: packet.serverMsgId,
-                    recipientId: 'bob'
-                }));
+                aliceSocket.send(JSON.stringify({ type: 2, status: 3, conversationId: packet.conversationId, serverMsgId: packet.serverMsgId, recipientId: 'bob' }));
             }
         }
 
         function handleBobMessage(packet) {
             if (packet.type === 0) { // Incoming from Alice
                 renderMessage('bobMessages', packet.content, 'incoming', packet.serverMsgId);
-                // Send Read Receipt
-                bobSocket.send(JSON.stringify({
-                    type: 2,
-                    status: 3,
-                    conversationId: packet.conversationId,
-                    serverMsgId: packet.serverMsgId,
-                    recipientId: 'alice'
-                }));
+                bobSocket.send(JSON.stringify({ type: 2, status: 3, conversationId: packet.conversationId, serverMsgId: packet.serverMsgId, recipientId: 'alice' }));
             } else if (packet.type === 2) {
                 const checkEl = document.getElementById(`checks_${packet.clientMsgId || packet.serverMsgId}`);
                 if (checkEl && packet.status >= 2) {

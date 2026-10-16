@@ -3,67 +3,102 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Distributed Rate Limiter Dashboard</title>
+    <title>Distributed Rate Limiter (Token Bucket)</title>
     <style>
-        :root { --bg: #0b0f19; --card: #151d30; --border: #24324f; --text: #f8fafc; --muted: #94a3b8; --primary: #6366f1; --accent: #10b981; --danger: #ef4444; --warning: #f59e0b; }
+        :root {
+            --bg: #09090b;
+            --card: #18181b;
+            --border: #27272a;
+            --text: #f4f4f5;
+            --muted: #a1a1aa;
+            --primary: #8b5cf6;
+            --primary-hover: #7c3aed;
+            --accent: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        body { background: var(--bg); color: var(--text); padding: 32px 16px; min-height: 100vh; display: flex; justify-content: center; }
-        .container { width: 100%; max-width: 850px; display: flex; flex-direction: column; gap: 24px; }
-        .header { text-align: center; }
-        .header h1 { font-size: 32px; font-weight: 800; color: #fff; margin-bottom: 8px; }
-        .header p { color: var(--muted); font-size: 15px; }
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); }
-        .card h2 { font-size: 18px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+        body { background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+        
+        /* Unified Top Navigation Bar */
+        .top-nav { background: #121215; border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+        .nav-brand { font-weight: 800; font-size: 15px; color: #fff; display: flex; align-items: center; gap: 8px; }
+        .nav-links { display: flex; gap: 8px; flex-wrap: wrap; }
+        .nav-pill { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; text-decoration: none; color: var(--muted); border: 1px solid transparent; transition: all 0.2s; }
+        .nav-pill:hover { color: #fff; border-color: var(--border); background: rgba(255,255,255,0.05); }
+        .nav-pill.active { background: rgba(139, 92, 246, 0.15); border-color: var(--primary); color: var(--primary); }
 
-        .bucket-container { display: flex; flex-direction: column; align-items: center; padding: 24px 0; background: #080c14; border-radius: 12px; margin-bottom: 20px; border: 1px dashed var(--border); }
-        .bucket-title { font-size: 13px; font-weight: 700; color: var(--muted); letter-spacing: 1.5px; margin-bottom: 16px; }
-        .token-rack { display: flex; gap: 12px; }
-        .token { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
-        .token.full { background: var(--accent); color: #080c14; box-shadow: 0 0 15px rgba(16, 185, 129, 0.5); transform: scale(1.05); }
-        .token.empty { background: rgba(255,255,255,0.05); border: 2px dashed var(--border); color: var(--muted); opacity: 0.4; }
+        .main-content { max-width: 860px; margin: 32px auto; padding: 0 16px; width: 100%; display: flex; flex-direction: column; gap: 24px; }
+        .header { text-align: center; }
+        .header h1 { font-size: 32px; font-weight: 800; color: #fff; margin-bottom: 6px; }
+        .header p { color: var(--muted); font-size: 14px; }
+
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .card h2 { font-size: 18px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+
+        .bucket-container { display: flex; flex-direction: column; align-items: center; padding: 28px 0; background: #0e0e11; border-radius: 12px; margin-bottom: 20px; border: 1px dashed var(--border); }
+        .bucket-title { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: 2px; margin-bottom: 18px; }
+        .token-rack { display: flex; gap: 14px; }
+        .token { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
+        .token.full { background: var(--accent); color: #000; box-shadow: 0 0 20px rgba(16, 185, 129, 0.5); transform: scale(1.08); }
+        .token.empty { background: rgba(255,255,255,0.03); border: 2px dashed var(--border); color: var(--muted); opacity: 0.3; }
 
         .btn-group { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
         .btn { padding: 12px 20px; border-radius: 8px; border: none; font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; flex: 1; }
         .btn-primary { background: var(--primary); color: #fff; }
-        .btn-primary:hover { background: #4f46e5; }
+        .btn-primary:hover { background: var(--primary-hover); }
         .btn-danger { background: var(--danger); color: #fff; }
         .btn-danger:hover { background: #dc2626; }
 
-        .headers-panel { background: #080c14; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 12px; border: 1px solid var(--border); }
+        .throttle-banner { display: none; padding: 16px; background: rgba(239, 68, 68, 0.15); border: 1px solid var(--danger); border-radius: 8px; text-align: center; margin-bottom: 20px; }
+        .headers-panel { background: #0e0e11; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 12px; border: 1px solid var(--border); }
         .header-item { display: flex; justify-content: space-between; margin-bottom: 6px; }
         .header-name { color: var(--muted); }
-        .header-val { color: #a5f3fc; font-weight: 700; }
+        .header-val { color: #c4b5fd; font-weight: 700; }
 
-        .throttle-banner { display: none; padding: 16px; background: rgba(239, 68, 68, 0.15); border: 1px solid var(--danger); border-radius: 8px; text-align: center; margin-bottom: 20px; animation: shake 0.4s; }
-        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
-
-        .log-box { font-family: monospace; font-size: 12px; height: 140px; overflow-y: auto; background: #080c14; border-radius: 8px; padding: 12px; color: #a5f3fc; margin-top: 16px; }
+        .log-box { font-family: monospace; font-size: 12px; height: 130px; overflow-y: auto; background: #0e0e11; border-radius: 8px; padding: 12px; color: #a5f3fc; margin-top: 16px; border: 1px solid var(--border); }
+        .log-line { margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.04); padding-bottom: 2px; }
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="top-nav">
+        <div class="nav-brand">🏛️ SYSTEM DESIGN MASTERY</div>
+        <div class="nav-links">
+            <a href="http://localhost:5149" class="nav-pill">🔗 1. URL Shortener</a>
+            <a href="http://localhost:5092" class="nav-pill active">⚡ 2. Rate Limiter</a>
+            <a href="http://localhost:5052" class="nav-pill">💬 3. Chat App</a>
+            <a href="http://localhost:5176" class="nav-pill">📰 4. News Feed</a>
+            <a href="http://localhost:5116" class="nav-pill">🎟️ 5. Ticket Booking</a>
+        </div>
+    </div>
+
+    <div class="main-content">
         <div class="header">
             <h1>Distributed Rate Limiter</h1>
-            <p>Token Bucket Algorithm • Atomic Concurrency • HTTP 429 & IETF RateLimit Headers</p>
+            <p>Token Bucket Algorithm • Atomic Concurrency Locks • IETF RateLimit Headers & HTTP 429</p>
         </div>
 
         <div class="card">
-            <h2>Live Token Bucket Visualization (Capacity: 5 | Refill: 1 token/sec)</h2>
+            <h2>
+                <span>Live Token Bucket (Capacity: 5 | Refill: 1.0 token/sec)</span>
+                <span style="font-size:12px; color:var(--accent); font-weight:normal;">Lazy Wall-Clock Replenishment</span>
+            </h2>
+
             <div class="bucket-container">
-                <div class="bucket-title">ACTIVE TOKEN RESERVES</div>
+                <div class="bucket-title">AVAILABLE REQUEST TOKENS</div>
                 <div class="token-rack" id="tokenRack">
                     <!-- 5 tokens injected via JS -->
                 </div>
             </div>
 
             <div class="throttle-banner" id="throttleBanner">
-                <div style="font-weight: 800; font-size: 18px; color: var(--danger); margin-bottom: 4px;">429 TOO MANY REQUESTS</div>
-                <div style="font-size: 13px;">Rate limit exceeded! Retry after: <strong id="retrySec">1</strong>s</div>
+                <div style="font-weight: 800; font-size: 18px; color: var(--danger); margin-bottom: 4px;">⚠️ 429 TOO MANY REQUESTS</div>
+                <div style="font-size: 13px;">API Rate limit exceeded! Retry after: <strong id="retrySec">1</strong> second(s)</div>
             </div>
 
             <div class="btn-group">
-                <button class="btn btn-primary" onclick="sendRequest()">Send Request (Cost: 1 Token)</button>
-                <button class="btn btn-danger" onclick="simulateBurst()">Simulate Burst (10 Rapid Requests)</button>
+                <button class="btn btn-primary" onclick="sendRequest()">⚡ Send Request (Consume 1 Token)</button>
+                <button class="btn btn-danger" onclick="simulateBurst()">💥 Simulate DDoS Spike (10 Rapid Requests)</button>
             </div>
 
             <div class="headers-panel">
@@ -74,7 +109,7 @@
             </div>
 
             <div class="log-box" id="logBox">
-                <div>[SYSTEM] Rate limiter middleware active. Token bucket initialized with 5 tokens.</div>
+                <div class="log-line">[SYSTEM] Token Bucket initialized (Capacity: 5, Refill: 1.0/sec). Middleware active.</div>
             </div>
         </div>
     </div>
@@ -108,11 +143,11 @@
                 if (res.status === 200) {
                     hideThrottle();
                     updateTokens(parseInt(remaining));
-                    log(`[200 OK] Request allowed. Tokens remaining: ${remaining}`);
+                    log(`[200 OK] Request permitted. Tokens remaining in bucket: ${remaining}`);
                 } else if (res.status === 429) {
                     updateTokens(0);
                     showThrottle(retry || '1');
-                    log(`[429 THROTTLED] Limit exceeded! Retry-After: ${retry}s`);
+                    log(`[429 THROTTLED] Rate limit exceeded! Retry-After: ${retry}s`);
                 }
             } catch (err) {
                 log(`[ERROR] ${err.message}`);
@@ -120,7 +155,7 @@
         }
 
         async function simulateBurst() {
-            log(`[BURST TEST] Dispatching 10 rapid concurrent requests...`);
+            log(`[SIMULATION] Sending 10 concurrent requests in rapid succession...`);
             for (let i = 1; i <= 10; i++) {
                 sendRequest();
                 await new Promise(r => setTimeout(r, 40));
@@ -140,10 +175,9 @@
         function log(msg) {
             const box = document.getElementById('logBox');
             const time = new Date().toLocaleTimeString();
-            box.innerHTML = `<div>[${time}] ${msg}</div>` + box.innerHTML;
+            box.innerHTML = `<div class="log-line">[${time}] ${msg}</div>` + box.innerHTML;
         }
 
-        // Auto refill simulation in UI matching backend rate (1 token per second)
         setInterval(() => {
             if (currentRemaining < 5) {
                 updateTokens(currentRemaining + 1);

@@ -3,95 +3,160 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Distributed URL Shortener</title>
+    <title>Distributed URL Shortener (Base62 KGS)</title>
     <style>
-        :root { --bg: #0f172a; --card: #1e293b; --border: #334155; --text: #f8fafc; --muted: #94a3b8; --primary: #38bdf8; --primary-hover: #0284c7; --accent: #10b981; }
+        :root {
+            --bg: #090e17;
+            --card: #111a2e;
+            --border: #1e2e4f;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --accent: #10b981;
+            --primary: #06b6d4;
+            --primary-hover: #0891b2;
+            --danger: #ef4444;
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        body { background: var(--bg); color: var(--text); padding: 32px 16px; min-height: 100vh; display: flex; justify-content: center; }
-        .container { width: 100%; max-width: 800px; display: flex; flex-direction: column; gap: 24px; }
+        body { background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+        
+        /* Unified Top Navigation Bar */
+        .top-nav { background: #0b1220; border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+        .nav-brand { font-weight: 800; font-size: 15px; color: #fff; display: flex; align-items: center; gap: 8px; }
+        .nav-links { display: flex; gap: 8px; flex-wrap: wrap; }
+        .nav-pill { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; text-decoration: none; color: var(--muted); border: 1px solid transparent; transition: all 0.2s; }
+        .nav-pill:hover { color: #fff; border-color: var(--border); background: rgba(255,255,255,0.05); }
+        .nav-pill.active { background: rgba(6, 182, 212, 0.15); border-color: var(--primary); color: var(--primary); }
+
+        .main-content { max-width: 900px; margin: 32px auto; padding: 0 16px; width: 100%; display: flex; flex-direction: column; gap: 24px; }
         .header { text-align: center; }
-        .header h1 { font-size: 32px; font-weight: 800; color: #fff; margin-bottom: 8px; }
-        .header p { color: var(--muted); font-size: 15px; }
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
-        .card h2 { font-size: 18px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+        .header h1 { font-size: 32px; font-weight: 800; color: #fff; margin-bottom: 6px; }
+        .header p { color: var(--muted); font-size: 14px; }
+
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .card h2 { font-size: 18px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+        
         .form-group { margin-bottom: 16px; }
-        label { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
-        input { width: 100%; padding: 12px 16px; background: #0b1120; border: 1px solid var(--border); border-radius: 8px; color: #fff; font-size: 14px; outline: none; transition: border-color 0.2s; }
+        label { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 6px; letter-spacing: 0.5px; }
+        input { width: 100%; padding: 12px 16px; background: #060a12; border: 1px solid var(--border); border-radius: 8px; color: #fff; font-size: 14px; outline: none; transition: border-color 0.2s; }
         input:focus { border-color: var(--primary); }
-        .btn { padding: 12px 20px; background: var(--primary); color: #0f172a; border: none; border-radius: 8px; font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+        
+        .btn { padding: 12px 20px; background: var(--primary); color: #060a12; border: none; border-radius: 8px; font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
         .btn:hover { background: var(--primary-hover); color: #fff; }
-        .btn-secondary { background: #334155; color: #fff; }
-        .btn-secondary:hover { background: #475569; }
-        .result-box { display: none; margin-top: 16px; padding: 16px; background: rgba(16, 185, 129, 0.1); border: 1px solid var(--accent); border-radius: 8px; }
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-top: 16px; }
-        .stat-card { background: #0b1120; padding: 16px; border-radius: 8px; border: 1px solid var(--border); text-align: center; }
-        .stat-value { font-size: 28px; font-weight: 800; color: var(--primary); }
-        .stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
-        .log-box { font-family: monospace; font-size: 12px; height: 120px; overflow-y: auto; background: #090d16; border-radius: 6px; padding: 10px; color: #a5f3fc; margin-top: 12px; }
+        .btn-secondary { background: #1e293b; color: #fff; }
+        .btn-secondary:hover { background: #334155; }
+        .btn-danger { background: rgba(239, 68, 68, 0.2); border: 1px solid var(--danger); color: var(--danger); }
+        .btn-danger:hover { background: var(--danger); color: #fff; }
+
+        .quick-fills { display: flex; gap: 8px; margin-top: 8px; }
+        .quick-tag { font-size: 11px; padding: 4px 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 20px; color: var(--muted); cursor: pointer; }
+        .quick-tag:hover { color: #fff; border-color: var(--primary); }
+
+        .result-box { display: none; margin-top: 20px; padding: 20px; background: rgba(16, 185, 129, 0.08); border: 1px solid var(--accent); border-radius: 10px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-top: 16px; }
+        .stat-card { background: #060a12; padding: 16px; border-radius: 8px; border: 1px solid var(--border); text-align: center; }
+        .stat-value { font-size: 30px; font-weight: 800; color: var(--accent); }
+        .stat-label { font-size: 11px; font-weight: 700; color: var(--muted); margin-top: 4px; }
+
+        .log-box { font-family: monospace; font-size: 12px; height: 130px; overflow-y: auto; background: #05080f; border-radius: 8px; padding: 12px; color: #67e8f9; margin-top: 16px; border: 1px solid var(--border); }
+        .log-line { margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.04); padding-bottom: 2px; }
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="top-nav">
+        <div class="nav-brand">🏛️ SYSTEM DESIGN MASTERY</div>
+        <div class="nav-links">
+            <a href="http://localhost:5149" class="nav-pill active">🔗 1. URL Shortener</a>
+            <a href="http://localhost:5092" class="nav-pill">⚡ 2. Rate Limiter</a>
+            <a href="http://localhost:5052" class="nav-pill">💬 3. Chat App</a>
+            <a href="http://localhost:5176" class="nav-pill">📰 4. News Feed</a>
+            <a href="http://localhost:5116" class="nav-pill">🎟️ 5. Ticket Booking</a>
+        </div>
+    </div>
+
+    <div class="main-content">
         <div class="header">
             <h1>Distributed URL Shortener</h1>
-            <p>Base62 KGS • Bloom Filter Protection • HTTP 307 Redirect • Async Analytics</p>
+            <p>Range-Based Key Generation Service (KGS) • Bloom Filter Protection • HTTP 307 Semantics</p>
         </div>
 
         <div class="card">
-            <h2>Create Short URL</h2>
+            <h2>
+                <span>Create Shortened URL</span>
+                <span style="font-size:12px; color:var(--accent); font-weight:normal;">3.5 Trillion Unique Base62 Keys</span>
+            </h2>
+            
             <div class="form-group">
-                <label>Destination Long URL</label>
-                <input type="url" id="longUrl" placeholder="https://example.com/very/long/deep/linked/article/slug" value="https://dotnet.microsoft.com/platform/why-dotnet">
+                <label>ORIGINAL LONG URL</label>
+                <input type="url" id="longUrl" value="https://dotnet.microsoft.com/platform/why-dotnet">
+                <div class="quick-fills">
+                    <span class="quick-tag" onclick="fillUrl('https://en.wikipedia.org/wiki/Distributed_computing')">Wikipedia: Distributed Computing</span>
+                    <span class="quick-tag" onclick="fillUrl('https://github.com/VirtualRV')">GitHub: VirtualRV</span>
+                    <span class="quick-tag" onclick="fillUrl('https://youtube.com/watch?v=dQw4w9WgXcQ')">YouTube Link</span>
+                </div>
             </div>
+
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
                 <div class="form-group">
-                    <label>Custom Alias (Optional)</label>
-                    <input type="text" id="customAlias" placeholder="e.g. myportfolio">
+                    <label>CUSTOM ALIAS (OPTIONAL)</label>
+                    <input type="text" id="customAlias" placeholder="e.g. systemdesign">
                 </div>
                 <div class="form-group">
-                    <label>TTL Expiration in Seconds (Optional)</label>
-                    <input type="number" id="ttl" placeholder="e.g. 86400">
+                    <label>TTL EXPIRATION (SECONDS)</label>
+                    <input type="number" id="ttl" placeholder="e.g. 86400 (24h)">
                 </div>
             </div>
-            <button class="btn" onclick="shortenUrl()">Shorten URL</button>
+
+            <button class="btn" onclick="shortenUrl()">⚡ Shorten URL</button>
 
             <div class="result-box" id="resultBox">
-                <div style="font-size: 13px; color: var(--muted); margin-bottom: 4px;">YOUR SHORTENED URL:</div>
+                <div style="font-size: 11px; font-weight: 700; color: var(--accent); margin-bottom: 6px;">URL GENERATED SUCCESSFULLY:</div>
                 <div style="display: flex; gap: 10px; align-items: center;">
-                    <input type="text" id="shortUrlOutput" readonly style="font-weight: 700; color: var(--accent);">
-                    <button class="btn" onclick="copyUrl()">Copy</button>
-                    <a id="visitBtn" target="_blank" class="btn btn-secondary" style="text-decoration:none; display:flex; align-items:center;">Visit</a>
+                    <input type="text" id="shortUrlOutput" readonly style="font-weight: 700; color: var(--accent); background:#060a12;">
+                    <button class="btn btn-secondary" onclick="copyUrl()">Copy</button>
+                    <a id="visitBtn" target="_blank" class="btn" style="text-decoration:none;">Visit (307)</a>
                 </div>
             </div>
         </div>
 
         <div class="card">
-            <h2>Click Analytics & Cache Penetration Defense</h2>
-            <div style="display: flex; gap: 12px;">
-                <input type="text" id="analyticsCode" placeholder="Enter Short Code (e.g. myportfolio)" style="flex: 1;">
+            <h2>
+                <span>Real-Time Analytics & Security Shield</span>
+                <span style="font-size:12px; color:var(--muted); font-weight:normal;">Async Kafka/Channel Pipeline</span>
+            </h2>
+
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <input type="text" id="analyticsCode" placeholder="Enter Short Code (e.g. systemdesign)" style="flex: 1; min-width: 200px;">
                 <button class="btn btn-secondary" onclick="fetchAnalytics()">View Analytics</button>
-                <button class="btn" style="background:#ef4444; color:#fff;" onclick="testBloomFilter()">Test Bloom Filter 404</button>
+                <button class="btn btn-danger" onclick="testBloomFilter()">Test Bloom Filter Shield</button>
             </div>
 
             <div class="stats-grid" id="statsGrid" style="display: none;">
                 <div class="stat-card">
                     <div class="stat-value" id="totalClicks">0</div>
-                    <div class="stat-label">TOTAL CLICKS</div>
+                    <div class="stat-label">TOTAL REDIRECTS</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value" id="topReferrer">-</div>
-                    <div class="stat-label">TOP REFERRER</div>
+                    <div class="stat-value" id="topReferrer" style="font-size:20px; padding-top:6px;">-</div>
+                    <div class="stat-label">PRIMARY REFERRER</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="lookupLatency">&lt; 1ms</div>
+                    <div class="stat-label">CACHE LOOKUP SPEED</div>
                 </div>
             </div>
 
             <div class="log-box" id="logBox">
-                <div>[SYSTEM] In-memory Bloom Filter & LRU cache initialized. Ready.</div>
+                <div class="log-line">[SYSTEM] In-memory Bloom Filter and LRU Cache active. Zero-collision KGS loaded.</div>
             </div>
         </div>
     </div>
 
     <script>
         let currentShortCode = '';
+
+        function fillUrl(url) {
+            document.getElementById('longUrl').value = url;
+        }
 
         async function shortenUrl() {
             const url = document.getElementById('longUrl').value;
@@ -111,7 +176,7 @@
                 document.getElementById('visitBtn').href = data.shortUrl;
                 document.getElementById('resultBox').style.display = 'block';
                 document.getElementById('analyticsCode').value = data.shortCode;
-                log(`[KGS GENERATED] Short code: ${data.shortCode} -> ${data.originalUrl}`);
+                log(`[KGS GENERATED] Key: ${data.shortCode} -> ${data.originalUrl}`);
             } else {
                 alert(data.error);
                 log(`[ERROR] ${data.error}`);
@@ -120,7 +185,7 @@
 
         async function fetchAnalytics() {
             const code = document.getElementById('analyticsCode').value || currentShortCode;
-            if (!code) return alert('Please enter a short code');
+            if (!code) return alert('Please shorten a URL first or type a short code.');
 
             const res = await fetch(`/api/analytics/${code}`);
             const data = await res.json();
@@ -129,17 +194,20 @@
             document.getElementById('totalClicks').innerText = data.totalClicks;
             
             const refs = Object.keys(data.topReferrers || {});
-            document.getElementById('topReferrer').innerText = refs.length ? refs[0] : 'None';
+            document.getElementById('topReferrer').innerText = refs.length ? refs[0] : 'Direct';
 
-            log(`[ANALYTICS] Code '${code}' has ${data.totalClicks} clicks.`);
+            log(`[ANALYTICS] Short code '${code}' recorded ${data.totalClicks} clicks.`);
         }
 
         async function testBloomFilter() {
             const bogus = 'fake_' + Math.random().toString(36).substring(2, 8);
-            log(`Probing non-existent key: /${bogus}...`);
+            log(`Probing non-existent short key: /${bogus}...`);
+            const start = performance.now();
             const res = await fetch(`/${bogus}`);
+            const duration = (performance.now() - start).toFixed(2);
+
             if (res.status === 404) {
-                log(`[BLOOM FILTER SHIELD] Key /${bogus} rejected instantly (0ms DB query load).`);
+                log(`[BLOOM FILTER DEFENSE] Key /${bogus} rejected in ${duration}ms! Deflected before touching database.`);
             }
         }
 
@@ -147,13 +215,13 @@
             const copyText = document.getElementById('shortUrlOutput');
             copyText.select();
             navigator.clipboard.writeText(copyText.value);
-            alert('Copied to clipboard!');
+            alert('Short URL copied to clipboard!');
         }
 
         function log(msg) {
             const box = document.getElementById('logBox');
             const time = new Date().toLocaleTimeString();
-            box.innerHTML = `<div>[${time}] ${msg}</div>` + box.innerHTML;
+            box.innerHTML = `<div class="log-line">[${time}] ${msg}</div>` + box.innerHTML;
         }
     </script>
 </body>
